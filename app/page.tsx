@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useMemo, useEffect } from "react"
+import React, { useMemo,useState, useEffect } from "react"
 import { Workflow, WorkflowStep } from "@/models/models"
 import { fetchEventSource } from "@microsoft/fetch-event-source"
 import dayjs from "dayjs"
@@ -23,6 +23,12 @@ import FunctionCalls from "./function-calls"
 import LLMDialog from "./llm-dialog"
 import PromptForm from "./prompt-form"
 import StockChart from "@/components/tradingview/stock-chart"
+interface FunctionCallData {
+  function: string;
+  args: {
+    toggle: string; // Changed from toggleLink to toggle
+  };
+}
 
 dayjs.extend(relativeTime)
 
@@ -60,6 +66,9 @@ export default function Chat({
 
   const abortControllerRef = React.useRef<AbortController | null>(null)
 
+// Define a type for the link types
+
+  
   useEffect(() => {
     async function fetchWorkflow() {
       const response = await fetch(`${process.env.NEXT_PUBLIC_SUPERAGENT_API_URL}/workflows/${process.env.NEXT_PUBLIC_WORKFLOW_ID}`, {
@@ -78,6 +87,9 @@ export default function Chat({
     fetchWorkflow();
   }, []);
 
+
+
+
   const resetState = () => {
     setIsLoading(false)
     setTimer(0)
@@ -93,7 +105,31 @@ export default function Chat({
 
     resetState()
   }
+  type LinkType = string; // This allows for any stock symbol
 
+  const [linkType, setLinkType] = useState<string>('SPY');
+
+  const handleToggleLink = (data: { function: string; args: string }) => {
+    console.log('Received function call data:', data);
+
+    try {
+      const args = JSON.parse(data.args);
+      const newLinkType = args.toggle.toUpperCase();
+
+      if (newLinkType) {
+        console.log(`Toggling to stock: ${newLinkType}`);
+        setLinkType(newLinkType);
+        console.log(`linkType state updated to: ${newLinkType}`);
+      } else {
+        console.error('No stock symbol specified in the function call data');
+      }
+    } catch (error) {
+      console.error('Error parsing function call args:', error);
+    }
+  };
+React.useEffect(() => {
+  console.log("Rendering StockChart with props:", linkType);
+}, [linkType]);
   async function onSubmit(value?: string) {
     let messageByEventIds: Record<string, string> = {}
     let currentEventId = ""
@@ -147,53 +183,72 @@ export default function Chat({
                 type: "end",
               },
             ])
-            resetState()
-          },
-          async onmessage(event) {
-            if (event.id) currentEventId = event.id
+resetState()
+  console.log("Message sent. Current linkType:", linkType);          },
 
-            if (event.event === "function_call") {
-              const data = JSON.parse(event.data)
-              setFunctionCalls((previousFunctionCalls = []) => [
-                ...previousFunctionCalls,
-                {
-                  ...data,
-                  type: "function_call",
-                },
-              ])
-            } else if (event.event === "error") {
+
+
+
+  async onmessage(event) {
+    console.log("Raw event:", event);
+  
+    if (event.id) currentEventId = event.id;
+  
+    try {
+      if (event.event === "function_call") {
+        // Parse the function call data manually
+        const data = event.data.replace(/'/g, '"');
+        const parsedData = JSON.parse(data);
+        console.log(`Function call received:`, parsedData);
+        if (parsedData.function === "dotoggle") {
+          handleToggleLink(parsedData);
+        }
+              }else if (event.event === "error") {
+                setMessages((previousMessages) => {
+                  let updatedMessages = [...previousMessages];
+                  for (let i = updatedMessages.length - 1; i >= 0; i--) {
+                    if (updatedMessages[i].type === "ai") {
+                      updatedMessages[i].message = event.data;
+                      updatedMessages[i].isSuccess = false;
+                      break;
+                    }
+                  }
+                  return updatedMessages;
+                });
+              } else if (event.data !== "[END]" && currentEventId) {
+                if (!messageByEventIds[currentEventId])
+                  messageByEventIds[currentEventId] = "";
+          
+                messageByEventIds[currentEventId] +=
+                  event.data === "" ? `${event.data} \n` : event.data;
+          
+                setMessages((previousMessages) => {
+                  let updatedMessages = [...previousMessages];
+                  for (let i = updatedMessages.length - 1; i >= 0; i--) {
+                    if (updatedMessages[i].type === "ai") {
+                      updatedMessages[i].steps = messageByEventIds;
+                      break;
+                    }
+                  }
+                  return updatedMessages;
+                });
+              }
+            } catch (error) {
+              console.error("Error processing event:", error);
+              console.log("Problematic event data:", event.data);
+              
+              // Optionally, update the UI to show an error occurred
               setMessages((previousMessages) => {
-                let updatedMessages = [...previousMessages]
-
+                let updatedMessages = [...previousMessages];
                 for (let i = updatedMessages.length - 1; i >= 0; i--) {
                   if (updatedMessages[i].type === "ai") {
-                    updatedMessages[i].message = event.data
-                    updatedMessages[i].isSuccess = false
-                    break
+                    updatedMessages[i].message = "An error occurred while processing the response.";
+                    updatedMessages[i].isSuccess = false;
+                    break;
                   }
                 }
-
-                return updatedMessages
-              })
-            } else if (event.data !== "[END]" && currentEventId) {
-              if (!messageByEventIds[currentEventId])
-                messageByEventIds[currentEventId] = ""
-
-              messageByEventIds[currentEventId] +=
-                event.data === "" ? `${event.data} \n` : event.data
-
-              setMessages((previousMessages) => {
-                let updatedMessages = [...previousMessages]
-
-                for (let i = updatedMessages.length - 1; i >= 0; i--) {
-                  if (updatedMessages[i].type === "ai") {
-                    updatedMessages[i].steps = messageByEventIds
-                    break
-                  }
-                }
-
-                return updatedMessages
-              })
+                return updatedMessages;
+              });
             }
           },
           onerror(error) {
@@ -235,7 +290,10 @@ export default function Chat({
     <div className="flex h-screen flex-col">
       <div className="flex-shrink-0 border-b p-4">
         {/* Stock Chart */}
-        <StockChart props="AAPL" />
+
+        <StockChart  props={linkType} />
+     
+       
 
         {/* Function calls and timer */}
         <div className="flex items-center justify-end space-x-2">
