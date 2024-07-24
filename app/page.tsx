@@ -1,358 +1,300 @@
-"use client";
+"use client"
 
-import React from "react";
-import { motion } from "framer-motion";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { RiUserLine } from "react-icons/ri";
-import { IoIosArrowForward } from "react-icons/io";
-import remarkGfm from "remark-gfm";
-import remarkMath from "remark-math";
-import { fetchEventSource } from "@microsoft/fetch-event-source";
-import { AreaChart, Area, Tooltip, ResponsiveContainer } from "recharts";
+import React, { useMemo, useEffect } from "react"
+import { Workflow, WorkflowStep } from "@/models/models"
+import { fetchEventSource } from "@microsoft/fetch-event-source"
+import dayjs from "dayjs"
+import relativeTime from "dayjs/plugin/relativeTime"
+import { TbBolt } from "react-icons/tb"
+import { v4 as uuidv4 } from "uuid"
 
-import PromptForm from "@/components/prompt-form";
-import { MemoizedReactMarkdown } from "@/components/markdown";
-import { CodeBlock } from "@/components/codeblock";
-import { transformStockData } from "@/lib/utils";
+import { Profile } from "@/types/profile"
+import { Badge } from "@/components/ui/badge"
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { useToast } from "@/components/ui/use-toast"
+import Message from "@/components/message"
 
-function PulsatingCursor() {
-  return (
-    <motion.div
-      initial="start"
-      animate={{
-        scale: [1, 1, 1],
-        opacity: [0, 1, 0],
-      }}
-      transition={{
-        duration: 0.5,
-        repeat: Infinity,
-      }}
-    >
-      ▍
-    </motion.div>
-  );
-}
+import FunctionCalls from "./function-calls"
+import LLMDialog from "./llm-dialog"
+import PromptForm from "./prompt-form"
+import StockChart from "@/components/tradingview/stock-chart"
 
-function Message({
-  type,
-  message,
+dayjs.extend(relativeTime)
+
+const defaultFunctionCalls = [
+  {
+    type: "start",
+  },
+]
+
+export default function Chat({
+  profile,
+  llms,
 }: {
-  type: string;
-  message: string;
-  onResubmit?: () => void;
+  profile: Profile
+  llms: any
 }) {
-  return (
-    <div className="flex flex-col space-y-1 pb-4">
-      <div className="min-w-4xl flex max-w-4xl space-x-4">
-        <Avatar
-          className={`h-8 w-8 rounded-md p-[1px] ${
-            type === "ai" && message.length === 0
-              ? "animate-border bg-gradient-to-r from-transparent via-gray-500 to-white bg-[length:400%_400%]"
-              : "bg-transparent border border-[#4C4C4C]"
-          }`}
-        >
-          <AvatarFallback
-            className={
-              type === "human"
-                ? "rounded-md bg-transparent "
-                : "rounded-md bg-[#111111]"
-            }
-          >
-            {type === "human" ? (
-              <RiUserLine color="white" />
-            ) : (
-              <IoIosArrowForward />
-            )}
-          </AvatarFallback>
-        </Avatar>
-        <div className="ml-4 mt-1 flex-1 flex-col space-y-2 overflow-hidden px-1">
-          {message?.length === 0 && <PulsatingCursor />}
-          <MemoizedReactMarkdown
-            className="prose dark:prose-invert prose-p:leading-relaxed prose-pre:p-0 break-words text-md"
-            remarkPlugins={[remarkGfm, remarkMath]}
-            components={{
-              table({ children }) {
-                return (
-                  <div className="mb-2 rounded-md border">
-                    <Table>{children}</Table>
-                  </div>
-                );
-              },
-              thead({ children }) {
-                return <TableHeader>{children}</TableHeader>;
-              },
-              tbody({ children }) {
-                return <TableBody>{children}</TableBody>;
-              },
-              tr({ children }) {
-                return <TableRow>{children}</TableRow>;
-              },
-              th({ children }) {
-                return <TableHead className="py-2">{children}</TableHead>;
-              },
-              td({ children }) {
-                return <TableCell className="py-2">{children}</TableCell>;
-              },
-              p({ children }) {
-                return <p className="mb-5">{children}</p>;
-              },
-              a({ children, href }) {
-                return (
-                  <a
-                    href={href}
-                    className="text-[#91FFC4] underline"
-                    rel="noreferrer"
-                    target="_blank"
-                  >
-                    {children}
-                  </a>
-                );
-              },
-              ol({ children }) {
-                return (
-                  <ol className="mb-5 list-decimal pl-[30px]">{children}</ol>
-                );
-              },
-              ul({ children }) {
-                return <ul className="mb-5 list-disc pl-[30px]">{children}</ul>;
-              },
-              li({ children }) {
-                return <li className="pb-1">{children}</li>;
-              },
-              // @ts-ignore
-              code({ node, inline, className, children, ...props }) {
-                const match = /language-(\w+)/.exec(className || "");
+  const [workflow, setWorkflow] = React.useState<Workflow | null>(null)
+  const [isLoading, setIsLoading] = React.useState<boolean>(false)
+  const [messages, setMessages] = React.useState<
+    {
+      type: string
+      message: string
+      steps?: Record<string, string>
+      isSuccess?: boolean
+    }[]
+  >([])
 
-                if (inline) {
-                  return (
-                    <code
-                      className="light:bg-slate-200 px-1 text-md dark:bg-slate-800"
-                      {...props}
-                    >
-                      {children}
-                    </code>
-                  );
-                }
+  const [functionCalls, setFunctionCalls] = React.useState<any[]>()
+  const endOfMessagesRef = React.useRef<HTMLDivElement | null>(null)
+  const [timer, setTimer] = React.useState<number>(0)
+  const [session, setSession] = React.useState<string | null>(uuidv4())
+  const [open, setOpen] = React.useState<boolean>(false)
+  const timerRef = React.useRef<NodeJS.Timeout | null>(null)
+  const { toast } = useToast()
 
-                return (
-                  <CodeBlock
-                    key={Math.random()}
-                    language={(match && match[1]) || ""}
-                    value={String(children).replace(/\n$/, "")}
-                    {...props}
-                  />
-                );
-              },
-            }}
-          >
-            {message}
-          </MemoizedReactMarkdown>
-        </div>
-      </div>
-    </div>
-  );
-}
+  const abortControllerRef = React.useRef<AbortController | null>(null)
 
-function Chart({ data }: { data: any }) {
-  const change = data.data[0].close - data.data[1].close;
-  const percentageChange = ((change / data.data[1].close) * 100).toFixed(2);
-  const changeColor = change < 0 ? "text-red-500" : "text-[#91FFC4]";
+  useEffect(() => {
+    async function fetchWorkflow() {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_SUPERAGENT_API_URL}/workflows/${process.env.NEXT_PUBLIC_WORKFLOW_ID}`, {
+        headers: {
+          authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPERAGENT_API_KEY}`,
+        },
+      });
+      const data = await response.json();
+      if (data.success) {
+        setWorkflow(data.data);
+        if (data.data.steps[0]?.agent?.initialMessage) {
+          setMessages([{ type: "ai", message: data.data.steps[0].agent.initialMessage }]);
+        }
+      }
+    }
+    fetchWorkflow();
+  }, []);
 
-  const CustomTooltip = ({
-    active,
-    payload,
-  }: {
-    active?: boolean;
-    payload: any;
-  }) => {
-    if (active && payload && payload.length) {
-      return (
-        <div className="flex flex-col">
-          <p className="text-sm text-muted-foreground">
-            {payload[0].payload.date}
-          </p>
-          <p className="text-sm">${payload[0].value}</p>
-        </div>
-      );
+  const resetState = () => {
+    setIsLoading(false)
+    setTimer(0)
+    if (timerRef.current) {
+      clearInterval(timerRef.current)
+    }
+  }
+
+  const abortStream = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
     }
 
-    return null;
-  };
+    resetState()
+  }
 
-  return (
-    <div className="flex flex-col space-y-1 pb-4 mt-[-20px] mb-5">
-      <div className="min-w-4xl flex max-w-4xl space-x-4">
-        <div className="w-8" />
-        <div className="ml-4 mt-1 flex-1 flex-col space-y-2 overflow-hidden px-1">
-          <div className="flex items-end space-x-2">
-            <p className="text-xl font-bold">{data.ticker}</p>
-            <p className="text-xl text-muted-foreground">
-              ${data.data[0].close}
-            </p>
-            <p className={changeColor}>
-              {change.toFixed(2)} ({percentageChange}%)
-            </p>
-          </div>
-          <div className="h-[200px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart
-                width={500}
-                height={400}
-                data={data.data}
-                margin={{
-                  top: 10,
-                  right: 30,
-                  left: 0,
-                  bottom: 0,
-                }}
-              >
-                <Tooltip
-                  content={({ active, payload }) => (
-                    <CustomTooltip active={active} payload={payload} />
-                  )}
-                />
-                <defs>
-                  <linearGradient id="splitColor" x1="0" y1="0" x2="0" y2="1">
-                    <stop
-                      offset="0%"
-                      stopColor="rgba(145,255,196,0.1)"
-                      stopOpacity={1}
-                    />
-                    <stop
-                      offset="100%"
-                      stopColor="rgba(145,255,196,0.1)"
-                      stopOpacity={0}
-                    />
-                  </linearGradient>
-                </defs>
-                <Area
-                  type="monotone"
-                  dataKey="close"
-                  stroke="#91FFC4"
-                  fill="url(#splitColor)"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Last update: {data.data[0].date}
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
+  async function onSubmit(value?: string) {
+    let messageByEventIds: Record<string, string> = {}
+    let currentEventId = ""
 
-export default function Home() {
-  const [messages, setMessages] = React.useState<
-    { type: string; message: any }[]
-  >([{ type: "ai", message: "Hey there! How can I help?" }]);
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
 
-  const getStockData = async ({ ticker }: { ticker: string }) => {
-    const dataResponse = await fetch(
-      `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${ticker}&outputsize=compact&apikey=${process.env.NEXT_PUBLIC_ALPHAVANTAGE_API_KEY}`
-    );
-    const data = await dataResponse.json();
-    const chartData = transformStockData(data).reverse();
+    abortControllerRef.current = new AbortController()
 
-    setMessages((previousMessages) => [
-      ...previousMessages,
-      { type: "function", message: { ticker, data: chartData } },
-    ]);
-  };
+    setIsLoading(true)
 
-  async function onSubmit(value: string) {
-    let message = "";
+    setTimer(0)
+    timerRef.current = setInterval(() => {
+      setTimer((prevTimer) => prevTimer + 0.1)
+    }, 100)
 
     setMessages((previousMessages: any) => [
       ...previousMessages,
       { type: "human", message: value },
-    ]);
+    ])
 
     setMessages((previousMessages) => [
       ...previousMessages,
-      { type: "ai", message },
-    ]);
+      { type: "ai", message: "" },
+    ])
 
-    await fetchEventSource(
-      `${process.env.NEXT_PUBLIC_SUPERAGENT_API_URL}/agents/${process.env.NEXT_PUBLIC_AGENT_ID}/invoke`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPERAGENT_API_KEY}`,
-        },
-        body: JSON.stringify({
-          input: value,
-          enableStreaming: true,
-        }),
-        openWhenHidden: true,
-        async onmessage(event) {
-          if (event.data !== "[END]" && event.event !== "function_call") {
-            message += event.data === "" ? `${event.data} \n` : event.data;
-            setMessages((previousMessages) => {
-              let updatedMessages = [...previousMessages];
+    try {
+      await fetchEventSource(
+        `${process.env.NEXT_PUBLIC_SUPERAGENT_API_URL}/workflows/${process.env.NEXT_PUBLIC_WORKFLOW_ID}/invoke`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPERAGENT_API_KEY}`,
+          },
+          body: JSON.stringify({
+            input: value,
+            enableStreaming: true,
+            sessionId: session,
+          }),
+          openWhenHidden: true,
+          signal: abortControllerRef.current.signal,
+          async onopen() {
+            setFunctionCalls(defaultFunctionCalls)
+          },
+          async onclose() {
+            setFunctionCalls((previousFunctionCalls = []) => [
+              ...previousFunctionCalls,
+              {
+                type: "end",
+              },
+            ])
+            resetState()
+          },
+          async onmessage(event) {
+            if (event.id) currentEventId = event.id
 
-              for (let i = updatedMessages.length - 1; i >= 0; i--) {
-                if (updatedMessages[i].type === "ai") {
-                  updatedMessages[i].message = message;
-                  break;
+            if (event.event === "function_call") {
+              const data = JSON.parse(event.data)
+              setFunctionCalls((previousFunctionCalls = []) => [
+                ...previousFunctionCalls,
+                {
+                  ...data,
+                  type: "function_call",
+                },
+              ])
+            } else if (event.event === "error") {
+              setMessages((previousMessages) => {
+                let updatedMessages = [...previousMessages]
+
+                for (let i = updatedMessages.length - 1; i >= 0; i--) {
+                  if (updatedMessages[i].type === "ai") {
+                    updatedMessages[i].message = event.data
+                    updatedMessages[i].isSuccess = false
+                    break
+                  }
                 }
-              }
 
-              return updatedMessages;
-            });
-          }
+                return updatedMessages
+              })
+            } else if (event.data !== "[END]" && currentEventId) {
+              if (!messageByEventIds[currentEventId])
+                messageByEventIds[currentEventId] = ""
 
-          if (event.event === "function_call") {
-            const data = JSON.parse(event.data);
+              messageByEventIds[currentEventId] +=
+                event.data === "" ? `${event.data} \n` : event.data
 
-            if (data.function === "get_stock") {
-              await getStockData({ ...data.args });
+              setMessages((previousMessages) => {
+                let updatedMessages = [...previousMessages]
+
+                for (let i = updatedMessages.length - 1; i >= 0; i--) {
+                  if (updatedMessages[i].type === "ai") {
+                    updatedMessages[i].steps = messageByEventIds
+                    break
+                  }
+                }
+
+                return updatedMessages
+              })
             }
+          },
+          onerror(error) {
+            throw error
+          },
+        }
+      )
+    } catch {
+      resetState()
+      setMessages((previousMessages) => {
+        let updatedMessages = [...previousMessages]
+
+        for (let i = updatedMessages.length - 1; i >= 0; i--) {
+          if (updatedMessages[i].type === "ai") {
+            updatedMessages[i].message =
+              "An error occured with your agent, please contact support."
+            break
           }
-        },
-      }
-    );
+        }
+
+        return updatedMessages
+      })
+    }
+  }
+
+  React.useEffect(() => {
+    endOfMessagesRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "nearest",
+      inline: "nearest",
+    })
+  }, [messages])
+
+  if (!workflow) {
+    return <div>Loading...</div>
   }
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden">
-      <div className="relative flex flex-1 flex-col overflow-hidden border-r">
-        <ScrollArea className="relative flex grow flex-col px-4">
-          <div className="from-[#262626] absolute inset-x-0 top-0 z-20 h-20 bg-gradient-to-b from-0% to-transparent to-50%" />
-          <div className="mb-20 mt-10 flex flex-col space-y-5 py-5">
-            <div className="container mx-auto flex max-w-3xl flex-col">
-              {messages.map(({ type, message }, index) =>
-                type === "function" ? (
-                  <Chart key={index} data={message} />
-                ) : (
-                  <Message key={index} type={type} message={message} />
-                )
-              )}
-            </div>
-          </div>
-        </ScrollArea>
-        <div className="from-[#262626] absolute inset-x-0 bottom-0 z-50 h-20 bg-gradient-to-t from-50% to-transparent to-100%">
-          <div className="relative mx-auto mb-6 max-w-3xl px-8">
-            <PromptForm
-              onSubmit={async (value) => {
-                onSubmit(value);
-              }}
-              isLoading={false}
+    <div className="flex h-screen flex-col">
+      <div className="flex-shrink-0 border-b p-4">
+        {/* Stock Chart */}
+        <StockChart props="AAPL" />
+
+        {/* Function calls and timer */}
+        <div className="flex items-center justify-end space-x-2">
+          {functionCalls && functionCalls.length > 0 && (
+            <Popover>
+              <PopoverTrigger>
+                <Badge variant="secondary" className="space-x-1">
+                  <TbBolt className="text-lg text-green-400" />
+                  <span className="font-mono">{functionCalls?.length}</span>
+                </Badge>
+              </PopoverTrigger>
+              <PopoverContent side="bottom">
+                <FunctionCalls functionCalls={functionCalls} />
+              </PopoverContent>
+            </Popover>
+          )}
+          <p className={`${timer === 0 ? "text-muted-foreground" : "text-primary"} font-mono text-sm`}>
+            {timer.toFixed(1)}s
+          </p>
+        </div>
+      </div>
+  
+      <div className="flex-grow overflow-auto">
+        <div className="flex flex-col space-y-4 p-2">
+          {messages.map(({ type, message, steps, isSuccess }, index) => (
+            <Message
+              key={index}
+              type={type}
+              message={message}
+              steps={steps}
+              profile={profile}
+              isSuccess={isSuccess}
             />
-          </div>
+          ))}
+          <div ref={endOfMessagesRef} />
+        </div>
+      </div>
+  
+      <div className="sticky bottom-0 flex-shrink-0 border-t bg-background p-4">
+        <div className="mx-auto max-w-4xl">
+          <PromptForm
+            onStop={() => abortStream()}
+            onSubmit={async (value) => {
+              onSubmit(value)
+            }}
+            onCreateSession={async (uuid) => {
+              setSession(uuid)
+              if (timerRef.current) {
+                clearInterval(timerRef.current)
+              }
+              setMessages([])
+              toast({
+                description: "New session created",
+              })
+            }}
+            isLoading={isLoading}
+          />
         </div>
       </div>
     </div>
-  );
+  )
 }
