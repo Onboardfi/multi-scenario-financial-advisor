@@ -19,7 +19,6 @@ import Message from "@/components/message"
 import FunctionCalls from "./function-calls"
 import LLMDialog from "./llm-dialog"
 import PromptForm from "./prompt-form"
-import StockChart from "@/components/tradingview/stock-chart"
 
 interface FunctionCallData {
   function: string;
@@ -50,6 +49,7 @@ export default function Chat({
       message: string
       steps?: Record<string, string>
       isSuccess?: boolean
+      linkType?: string // Add this line
     }[]
   >([])
   const [functionCalls, setFunctionCalls] = React.useState<any[]>()
@@ -105,6 +105,13 @@ export default function Chat({
         console.log(`Toggling to stock: ${newLinkType}`);
         setLinkType(newLinkType);
         console.log(`linkType state updated to: ${newLinkType}`);
+        // Add the stock chart to the latest message
+        setMessages((prevMessages) => {
+          const newMessages = [...prevMessages];
+          const lastMessage = newMessages[newMessages.length - 1];
+          lastMessage.linkType = newLinkType;
+          return newMessages;
+        });
       } else {
         console.error('No stock symbol specified in the function call data');
       }
@@ -270,32 +277,9 @@ export default function Chat({
 
   return (
     <div className="flex h-screen flex-col">
-      <div className="flex-shrink-0 border-b p-4">
-        {/* Stock Chart */}
-        {linkType && <StockChart props={linkType} />}
-        {/* Function calls and timer */}
-        <div className="flex items-center justify-end space-x-2">
-          {functionCalls && functionCalls.length > 0 && (
-            <Popover>
-              <PopoverTrigger>
-                <Badge variant="secondary" className="space-x-1">
-                  <TbBolt className="text-lg text-green-400" />
-                  <span className="font-mono">{functionCalls?.length}</span>
-                </Badge>
-              </PopoverTrigger>
-              <PopoverContent side="bottom">
-                <FunctionCalls functionCalls={functionCalls} />
-              </PopoverContent>
-            </Popover>
-          )}
-          <p className={`${timer === 0 ? "text-muted-foreground" : "text-primary"} font-mono text-sm`}>
-            {timer.toFixed(1)}s
-          </p>
-        </div>
-      </div>
       <div className="flex-grow overflow-auto">
         <div className="flex flex-col space-y-4 p-2">
-          {messages.map(({ type, message, steps, isSuccess }, index) => (
+          {messages.map(({ type, message, steps, isSuccess, linkType }, index) => (
             <Message
               key={index}
               type={type}
@@ -303,6 +287,7 @@ export default function Chat({
               steps={steps}
               profile={profile}
               isSuccess={isSuccess}
+              linkType={linkType} // Pass the linkType to Message component
             />
           ))}
           <div ref={endOfMessagesRef} />

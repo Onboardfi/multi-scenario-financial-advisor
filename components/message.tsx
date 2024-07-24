@@ -56,6 +56,7 @@ interface MessageProps {
   isSuccess?: boolean
   steps?: Record<string, string>
   profile: Profile
+  linkType?: string // Add this line
   onResubmit?: () => void
 }
 
@@ -65,6 +66,7 @@ export default function Message({
   isSuccess = true,
   steps,
   profile,
+  linkType, // Add this line
   onResubmit,
 }: MessageProps) {
   const { toast } = useToast()
@@ -105,15 +107,14 @@ export default function Message({
                           <p className="font-semibold">{key}</p>
                         </AccordionTrigger>
                         <AccordionContent>
-                      
                           <CustomMarkdown message={value} />
-
-
                         </AccordionContent>
                       </AccordionItem>
                     </Accordion>
                   ))
                 : message && <CustomMarkdown message={message} />}
+              {/* Conditionally render the StockChart based on linkType */}
+              {linkType && <StockChart props={linkType} />}
             </>
           ) : (
             <MessageAlert error={message} />
