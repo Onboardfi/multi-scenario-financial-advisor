@@ -7,6 +7,10 @@ export function StockChart({ props: symbol }: { props: string }) {
 
   useEffect(() => {
     if (!container.current) return
+
+    // Clear any existing child elements to avoid multiple charts
+    container.current.innerHTML = '';
+
     const script = document.createElement('script')
     script.src =
       'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js'
@@ -33,7 +37,7 @@ export function StockChart({ props: symbol }: { props: string }) {
 
     return () => {
       if (container.current) {
-        container.current.removeChild(script)
+        container.current.innerHTML = '';
       }
     }
   }, [symbol])

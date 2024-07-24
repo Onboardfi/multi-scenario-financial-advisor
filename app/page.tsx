@@ -1,13 +1,11 @@
 "use client"
-
-import React, { useMemo,useState, useEffect } from "react"
+import React, { useMemo, useState, useEffect } from "react"
 import { Workflow, WorkflowStep } from "@/models/models"
 import { fetchEventSource } from "@microsoft/fetch-event-source"
 import dayjs from "dayjs"
 import relativeTime from "dayjs/plugin/relativeTime"
 import { TbBolt } from "react-icons/tb"
 import { v4 as uuidv4 } from "uuid"
-
 import { Profile } from "@/types/profile"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -18,20 +16,19 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useToast } from "@/components/ui/use-toast"
 import Message from "@/components/message"
-
 import FunctionCalls from "./function-calls"
 import LLMDialog from "./llm-dialog"
 import PromptForm from "./prompt-form"
 import StockChart from "@/components/tradingview/stock-chart"
+
 interface FunctionCallData {
   function: string;
   args: {
-    toggle: string; // Changed from toggleLink to toggle
+    toggle: string;
   };
 }
 
 dayjs.extend(relativeTime)
-
 const defaultFunctionCalls = [
   {
     type: "start",
@@ -55,7 +52,6 @@ export default function Chat({
       isSuccess?: boolean
     }[]
   >([])
-
   const [functionCalls, setFunctionCalls] = React.useState<any[]>()
   const endOfMessagesRef = React.useRef<HTMLDivElement | null>(null)
   const [timer, setTimer] = React.useState<number>(0)
@@ -63,12 +59,8 @@ export default function Chat({
   const [open, setOpen] = React.useState<boolean>(false)
   const timerRef = React.useRef<NodeJS.Timeout | null>(null)
   const { toast } = useToast()
-
   const abortControllerRef = React.useRef<AbortController | null>(null)
 
-// Define a type for the link types
-
-  
   useEffect(() => {
     async function fetchWorkflow() {
       const response = await fetch(`${process.env.NEXT_PUBLIC_SUPERAGENT_API_URL}/workflows/${process.env.NEXT_PUBLIC_WORKFLOW_ID}`, {
@@ -87,9 +79,6 @@ export default function Chat({
     fetchWorkflow();
   }, []);
 
-
-
-
   const resetState = () => {
     setIsLoading(false)
     setTimer(0)
@@ -102,20 +91,16 @@ export default function Chat({
     if (abortControllerRef.current) {
       abortControllerRef.current.abort()
     }
-
     resetState()
   }
-  type LinkType = string; // This allows for any stock symbol
 
-  const [linkType, setLinkType] = useState<string>('SPY');
+  const [linkType, setLinkType] = useState<string>('');
 
   const handleToggleLink = (data: { function: string; args: string }) => {
     console.log('Received function call data:', data);
-
     try {
       const args = JSON.parse(data.args);
       const newLinkType = args.toggle.toUpperCase();
-
       if (newLinkType) {
         console.log(`Toggling to stock: ${newLinkType}`);
         setLinkType(newLinkType);
@@ -127,9 +112,11 @@ export default function Chat({
       console.error('Error parsing function call args:', error);
     }
   };
-React.useEffect(() => {
-  console.log("Rendering StockChart with props:", linkType);
-}, [linkType]);
+
+  React.useEffect(() => {
+    console.log("Rendering StockChart with props:", linkType);
+  }, [linkType]);
+
   async function onSubmit(value?: string) {
     let messageByEventIds: Record<string, string> = {}
     let currentEventId = ""
@@ -183,27 +170,27 @@ React.useEffect(() => {
                 type: "end",
               },
             ])
-resetState()
-  console.log("Message sent. Current linkType:", linkType);          },
-
-
-
-
-  async onmessage(event) {
-    console.log("Raw event:", event);
-  
-    if (event.id) currentEventId = event.id;
-  
-    try {
-      if (event.event === "function_call") {
-        // Parse the function call data manually
-        const data = event.data.replace(/'/g, '"');
-        const parsedData = JSON.parse(data);
-        console.log(`Function call received:`, parsedData);
-        if (parsedData.function === "dotoggle") {
-          handleToggleLink(parsedData);
-        }
-              }else if (event.event === "error") {
+            resetState()
+            console.log("Message sent. Current linkType:", linkType);
+          },
+          async onmessage(event) {
+            console.log("Raw event:", event);
+            if (event.id) currentEventId = event.id;
+            try {
+              if (event.event === "function_call") {
+                console.log("Raw event data:", event.data);
+                // Step 1: Replace single quotes with double quotes for the outer JSON structure
+                let data = event.data.replace(/'/g, '"');
+                // Step 2: Escape the double quotes inside the `args` value
+                data = data.replace(/"args": "({.*?})"/, (match, p1) => {
+                  return `"args": "${p1.replace(/"/g, '\\"')}"`;
+                });
+                const parsedData = JSON.parse(data);
+                console.log("Parsed function call data:", parsedData);
+                if (parsedData.function === "dotoggle") {
+                  handleToggleLink(parsedData);
+                }
+              } else if (event.event === "error") {
                 setMessages((previousMessages) => {
                   let updatedMessages = [...previousMessages];
                   for (let i = updatedMessages.length - 1; i >= 0; i--) {
@@ -218,10 +205,8 @@ resetState()
               } else if (event.data !== "[END]" && currentEventId) {
                 if (!messageByEventIds[currentEventId])
                   messageByEventIds[currentEventId] = "";
-          
                 messageByEventIds[currentEventId] +=
                   event.data === "" ? `${event.data} \n` : event.data;
-          
                 setMessages((previousMessages) => {
                   let updatedMessages = [...previousMessages];
                   for (let i = updatedMessages.length - 1; i >= 0; i--) {
@@ -236,7 +221,6 @@ resetState()
             } catch (error) {
               console.error("Error processing event:", error);
               console.log("Problematic event data:", event.data);
-              
               // Optionally, update the UI to show an error occurred
               setMessages((previousMessages) => {
                 let updatedMessages = [...previousMessages];
@@ -260,7 +244,6 @@ resetState()
       resetState()
       setMessages((previousMessages) => {
         let updatedMessages = [...previousMessages]
-
         for (let i = updatedMessages.length - 1; i >= 0; i--) {
           if (updatedMessages[i].type === "ai") {
             updatedMessages[i].message =
@@ -268,7 +251,6 @@ resetState()
             break
           }
         }
-
         return updatedMessages
       })
     }
@@ -290,11 +272,7 @@ resetState()
     <div className="flex h-screen flex-col">
       <div className="flex-shrink-0 border-b p-4">
         {/* Stock Chart */}
-
-        <StockChart  props={linkType} />
-     
-       
-
+        {linkType && <StockChart props={linkType} />}
         {/* Function calls and timer */}
         <div className="flex items-center justify-end space-x-2">
           {functionCalls && functionCalls.length > 0 && (
@@ -315,7 +293,6 @@ resetState()
           </p>
         </div>
       </div>
-  
       <div className="flex-grow overflow-auto">
         <div className="flex flex-col space-y-4 p-2">
           {messages.map(({ type, message, steps, isSuccess }, index) => (
@@ -331,7 +308,6 @@ resetState()
           <div ref={endOfMessagesRef} />
         </div>
       </div>
-  
       <div className="sticky bottom-0 flex-shrink-0 border-t bg-background p-4">
         <div className="mx-auto max-w-4xl">
           <PromptForm
