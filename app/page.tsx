@@ -1,33 +1,19 @@
 "use client"
-import React, { useMemo, useState, useEffect, useRef } from "react"
-import { Workflow, WorkflowStep } from "@/models/models"
+import React, { useState, useEffect, useRef } from "react"
+import { Workflow } from "@/models/models"
 import { fetchEventSource } from "@microsoft/fetch-event-source"
 import dayjs from "dayjs"
 import relativeTime from "dayjs/plugin/relativeTime"
-import { TbBolt } from "react-icons/tb"
 import { v4 as uuidv4 } from "uuid"
 import { Profile } from "@/types/profile"
-import { Badge } from "@/components/ui/badge"
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { useToast } from "@/components/ui/use-toast"
 import Message from "@/components/message"
-import FunctionCalls from "./function-calls"
-import LLMDialog from "./llm-dialog"
 import PromptForm from "./prompt-form"
+import { TickerTape } from '@/components/tradingview/ticker-tape'
 
 dayjs.extend(relativeTime)
-const defaultFunctionCalls = [
-  {
-    type: "start",
-  },
-]
+const defaultFunctionCalls = [{ type: "start" }]
 
-// Utility function to safely parse JSON data
 const safeParseJSON = (data: string) => {
   try {
     return JSON.parse(data);
@@ -37,29 +23,19 @@ const safeParseJSON = (data: string) => {
   }
 }
 
-export default function Chat({
-  profile,
-  llms,
-}: {
-  profile: Profile
-  llms: any
-}) {
+export default function Chat({ profile, llms }: { profile: Profile; llms: any }) {
   const [workflow, setWorkflow] = useState<Workflow | null>(null)
   const [isLoading, setIsLoading] = useState<boolean>(false)
-  const [messages, setMessages] = useState<
-    {
-      type: string
-      message: string
-      steps?: Record<string, string>
-      isSuccess?: boolean
-      linkType?: string
-    }[]
-  >([])
+  const [messages, setMessages] = useState<{
+    type: string
+    message: string
+    steps?: Record<string, { content: string; linkType?: string }>
+    isSuccess?: boolean
+  }[]>([])
   const [functionCalls, setFunctionCalls] = useState<any[]>()
   const endOfMessagesRef = useRef<HTMLDivElement | null>(null)
   const [timer, setTimer] = useState<number>(0)
   const [session, setSession] = useState<string | null>(uuidv4())
-  const [open, setOpen] = useState<boolean>(false)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   const { toast } = useToast()
   const abortControllerRef = useRef<AbortController | null>(null)
@@ -75,7 +51,16 @@ export default function Chat({
       if (data.success) {
         setWorkflow(data.data);
         if (data.data.steps[0]?.agent?.initialMessage) {
-          setMessages([{ type: "ai", message: data.data.steps[0].agent.initialMessage }]);
+          setMessages([{ 
+            type: "ai", 
+            message: data.data.steps[0].agent.initialMessage, 
+            steps: { 
+              "initialMessage": { 
+                content: data.data.steps[0].agent.initialMessage, 
+                linkType: undefined 
+              } 
+            } 
+          }]);
         }
       }
     }
@@ -107,8 +92,23 @@ export default function Chat({
         setMessages((prevMessages) => {
           const newMessages = [...prevMessages];
           const lastMessage = newMessages[newMessages.length - 1];
-          lastMessage.linkType = newLinkType;
-          console.log('Updated linkType:', lastMessage.linkType);
+          if (lastMessage.type === "ai" && lastMessage.steps) {
+            const stepKeys = Object.keys(lastMessage.steps);
+            if (stepKeys.length > 0) {
+              const firstStepKey = stepKeys[0];
+              lastMessage.steps[firstStepKey] = {
+                ...lastMessage.steps[firstStepKey],
+                linkType: newLinkType
+              };
+              // Clear linkType from other steps
+              stepKeys.slice(1).forEach(key => {
+                lastMessage.steps[key] = {
+                  ...lastMessage.steps[key],
+                  linkType: undefined
+                };
+              });
+            }
+          }
           return newMessages;
         });
       } else {
@@ -116,9 +116,9 @@ export default function Chat({
       }
     }
   };
-
+  
   async function onSubmit(value?: string) {
-    let messageByEventIds: Record<string, string> = {}
+    let messageByEventIds: Record<string, { content: string; linkType?: string }> = {}
     let currentEventId = ""
 
     if (abortControllerRef.current) {
@@ -134,14 +134,10 @@ export default function Chat({
       setTimer((prevTimer) => prevTimer + 0.1)
     }, 100)
 
-    setMessages((previousMessages: any) => [
-      ...previousMessages,
-      { type: "human", message: value },
-    ])
-
     setMessages((previousMessages) => [
       ...previousMessages,
-      { type: "ai", message: "" },
+      { type: "human", message: value || "" },
+      { type: "ai", message: "" }
     ])
 
     try {
@@ -160,77 +156,61 @@ export default function Chat({
           }),
           openWhenHidden: true,
           signal: abortControllerRef.current.signal,
-          async onopen() {
+          onopen() {
             setFunctionCalls(defaultFunctionCalls)
           },
-          async onclose() {
-            setFunctionCalls((previousFunctionCalls = []) => [
-              ...previousFunctionCalls,
-              {
-                type: "end",
-              },
-            ])
+          onclose() {
+            setFunctionCalls((prev = []) => [...prev, { type: "end" }])
             resetState()
             console.log("Message sent.");
           },
-          async onmessage(event) {
+          onmessage(event) {
             console.log("Raw event:", event);
             if (event.id) currentEventId = event.id;
             try {
               if (event.event === "function_call") {
                 console.log("Raw event data:", event.data);
-                // Use safeParseJSON for parsing function call data
-                let data = event.data.replace(/'/g, '"');
-                data = data.replace(/"args": "({.*?})"/, (match, p1) => {
-                  return `"args": "${p1.replace(/"/g, '\\"')}"`;
-                });
+                let data = event.data.replace(/'/g, '"').replace(/"args": "({.*?})"/, (match, p1) => `"args": "${p1.replace(/"/g, '\\"')}"`);
                 const parsedData = safeParseJSON(data);
                 console.log("Parsed function call data:", parsedData);
                 if (parsedData?.function === "dotoggle") {
                   handleToggleLink(parsedData);
                 }
               } else if (event.event === "error") {
-                setMessages((previousMessages) => {
-                  let updatedMessages = [...previousMessages];
-                  for (let i = updatedMessages.length - 1; i >= 0; i--) {
-                    if (updatedMessages[i].type === "ai") {
-                      updatedMessages[i].message = event.data;
-                      updatedMessages[i].isSuccess = false;
-                      break;
-                    }
+                setMessages((prev) => {
+                  const updated = [...prev];
+                  const lastAiMessage = updated.findLast(m => m.type === "ai");
+                  if (lastAiMessage) {
+                    lastAiMessage.message = event.data;
+                    lastAiMessage.isSuccess = false;
                   }
-                  return updatedMessages;
+                  return updated;
                 });
               } else if (event.data !== "[END]" && currentEventId) {
-                if (!messageByEventIds[currentEventId])
-                  messageByEventIds[currentEventId] = "";
-                messageByEventIds[currentEventId] +=
-                  event.data === "" ? `${event.data} \n` : event.data;
-                setMessages((previousMessages) => {
-                  let updatedMessages = [...previousMessages];
-                  for (let i = updatedMessages.length - 1; i >= 0; i--) {
-                    if (updatedMessages[i].type === "ai") {
-                      updatedMessages[i].steps = messageByEventIds;
-                      break;
-                    }
+                if (!messageByEventIds[currentEventId]) {
+                  messageByEventIds[currentEventId] = { content: "" };
+                }
+                messageByEventIds[currentEventId].content += event.data === "" ? "\n" : event.data;
+                setMessages((prev) => {
+                  const updated = [...prev];
+                  const lastAiMessage = updated.findLast(m => m.type === "ai");
+                  if (lastAiMessage) {
+                    lastAiMessage.steps = { ...messageByEventIds };
                   }
-                  return updatedMessages;
+                  return updated;
                 });
               }
             } catch (error) {
               console.error("Error processing event:", error);
               console.log("Problematic event data:", event.data);
-              // Optionally, update the UI to show an error occurred
-              setMessages((previousMessages) => {
-                let updatedMessages = [...previousMessages];
-                for (let i = updatedMessages.length - 1; i >= 0; i--) {
-                  if (updatedMessages[i].type === "ai") {
-                    updatedMessages[i].message = "An error occurred while processing the response.";
-                    updatedMessages[i].isSuccess = false;
-                    break;
-                  }
+              setMessages((prev) => {
+                const updated = [...prev];
+                const lastAiMessage = updated.findLast(m => m.type === "ai");
+                if (lastAiMessage) {
+                  lastAiMessage.message = "An error occurred while processing the response.";
+                  lastAiMessage.isSuccess = false;
                 }
-                return updatedMessages;
+                return updated;
               });
             }
           },
@@ -241,17 +221,15 @@ export default function Chat({
       )
     } catch {
       resetState()
-      setMessages((previousMessages) => {
-        let updatedMessages = [...previousMessages]
-        for (let i = updatedMessages.length - 1; i >= 0; i--) {
-          if (updatedMessages[i].type === "ai") {
-            updatedMessages[i].message =
-              "An error occured with your agent, please contact support."
-            break
-          }
+      setMessages((prev) => {
+        const updated = [...prev];
+        const lastAiMessage = updated.findLast(m => m.type === "ai");
+        if (lastAiMessage) {
+          lastAiMessage.message = "An error occurred with your agent, please contact support.";
+          lastAiMessage.isSuccess = false;
         }
-        return updatedMessages
-      })
+        return updated;
+      });
     }
   }
 
@@ -269,9 +247,10 @@ export default function Chat({
 
   return (
     <div className="flex h-screen flex-col">
+      <TickerTape />
       <div className="flex-grow overflow-auto">
         <div className="flex flex-col space-y-4 p-2">
-          {messages.map(({ type, message, steps, isSuccess, linkType }, index) => (
+          {messages.map(({ type, message, steps, isSuccess }, index) => (
             <Message
               key={index}
               type={type}
@@ -279,7 +258,6 @@ export default function Chat({
               steps={steps}
               profile={profile}
               isSuccess={isSuccess}
-              linkType={linkType}
             />
           ))}
           <div ref={endOfMessagesRef} />
@@ -288,11 +266,9 @@ export default function Chat({
       <div className="sticky bottom-0 flex-shrink-0 border-t bg-background p-4">
         <div className="mx-auto max-w-4xl">
           <PromptForm
-            onStop={() => abortStream()}
-            onSubmit={async (value) => {
-              onSubmit(value)
-            }}
-            onCreateSession={async (uuid) => {
+            onStop={abortStream}
+            onSubmit={onSubmit}
+            onCreateSession={(uuid) => {
               setSession(uuid)
               if (timerRef.current) {
                 clearInterval(timerRef.current)

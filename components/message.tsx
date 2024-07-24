@@ -1,9 +1,7 @@
 /* eslint-disable react/jsx-key */
 "use client"
-
-import React, { useEffect } from "react"
+import React from "react"
 import { motion } from "framer-motion"
-
 import { AiOutlineExclamationCircle } from "react-icons/ai"
 import { TbBolt } from "react-icons/tb"
 import remarkGfm from "remark-gfm"
@@ -53,9 +51,8 @@ interface MessageProps {
   type: string
   message: string
   isSuccess?: boolean
-  steps?: Record<string, string>
+  steps?: Record<string, { content: string; linkType?: string }>
   profile: Profile
-  linkType?: string
   onResubmit?: () => void
 }
 
@@ -65,7 +62,6 @@ export default function Message({
   isSuccess = true,
   steps,
   profile,
-  linkType,
   onResubmit,
 }: MessageProps) {
   const { toast } = useToast()
@@ -76,11 +72,7 @@ export default function Message({
     })
   }
 
-  useEffect(() => {
-    if (linkType) {
-      console.log("linkType in Message component:", linkType);
-    }
-  }, [linkType]);
+  console.log("Message props:", { type, message, isSuccess, steps });
 
   return (
     <div className="container flex flex-col space-y-1 pb-4 md:max-w-md lg:max-w-4xl">
@@ -91,9 +83,7 @@ export default function Message({
           }`}
         >
           <AvatarFallback className="rounded-md bg-background">
-            {type === "human"
-              ? "A"
-              : "A"}
+            {type === "human" ? "A" : "A"}
           </AvatarFallback>
         </Avatar>
         <div className="ml-4 mt-2 flex-1 flex-col space-y-2 overflow-hidden px-1">
@@ -101,25 +91,34 @@ export default function Message({
           {isSuccess ? (
             <>
               {steps
-                ? Object.entries(steps).map(([key, value], index) => (
-                    <Accordion defaultValue={key} type="single" collapsible key={index}>
-                      <AccordionItem value={key} className="border-muted">
-                        <AccordionTrigger
-                          className={`mb-4 py-0 text-sm hover:no-underline ${
-                            index > 0 && "mt-2"
-                          }`}
-                        >
-                          <p className="font-semibold">{key}</p>
-                        </AccordionTrigger>
-                        <AccordionContent>
-                          <CustomMarkdown message={value} />
-                        </AccordionContent>
-                      </AccordionItem>
-                    </Accordion>
-                  ))
+                ? Object.entries(steps).map(([key, { content, linkType }], index) => {
+                    console.log(`Accordion cell ${index + 1} (${key}):`);
+                    console.log("  Content:", content);
+                    console.log("  LinkType:", linkType);
+                    return (
+                      <Accordion defaultValue={key} type="single" collapsible key={index}>
+                        <AccordionItem value={key} className="border-muted">
+                          <AccordionTrigger
+                            className={`mb-4 py-0 text-sm hover:no-underline ${
+                              index > 0 && "mt-2"
+                            }`}
+                          >
+                            <p className="font-semibold">{key}</p>
+                          </AccordionTrigger>
+                          <AccordionContent>
+                            <CustomMarkdown message={content} />
+                            {linkType && (
+                              <>
+                                <p>Stock Chart for: {linkType}</p>
+                                <StockChart props={linkType} />
+                              </>
+                            )}
+                          </AccordionContent>
+                        </AccordionItem>
+                      </Accordion>
+                    );
+                  })
                 : message && <CustomMarkdown message={message} />}
-              {/* Conditionally render the StockChart based on linkType */}
-              {linkType && <StockChart props={linkType} />}
             </>
           ) : (
             <MessageAlert error={message} />
