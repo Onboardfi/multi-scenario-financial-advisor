@@ -1,5 +1,5 @@
 "use client"
-import React, { useMemo, useState, useEffect } from "react"
+import React, { useMemo, useState, useEffect, useRef } from "react"
 import { Workflow, WorkflowStep } from "@/models/models"
 import { fetchEventSource } from "@microsoft/fetch-event-source"
 import dayjs from "dayjs"
@@ -20,19 +20,22 @@ import FunctionCalls from "./function-calls"
 import LLMDialog from "./llm-dialog"
 import PromptForm from "./prompt-form"
 
-interface FunctionCallData {
-  function: string;
-  args: {
-    toggle: string;
-  };
-}
-
 dayjs.extend(relativeTime)
 const defaultFunctionCalls = [
   {
     type: "start",
   },
 ]
+
+// Utility function to safely parse JSON data
+const safeParseJSON = (data: string) => {
+  try {
+    return JSON.parse(data);
+  } catch (error) {
+    console.error("Error parsing JSON:", error, "Data:", data);
+    return null;
+  }
+}
 
 export default function Chat({
   profile,
@@ -41,25 +44,25 @@ export default function Chat({
   profile: Profile
   llms: any
 }) {
-  const [workflow, setWorkflow] = React.useState<Workflow | null>(null)
-  const [isLoading, setIsLoading] = React.useState<boolean>(false)
-  const [messages, setMessages] = React.useState<
+  const [workflow, setWorkflow] = useState<Workflow | null>(null)
+  const [isLoading, setIsLoading] = useState<boolean>(false)
+  const [messages, setMessages] = useState<
     {
       type: string
       message: string
       steps?: Record<string, string>
       isSuccess?: boolean
-      linkType?: string // Add this line
+      linkType?: string
     }[]
   >([])
-  const [functionCalls, setFunctionCalls] = React.useState<any[]>()
-  const endOfMessagesRef = React.useRef<HTMLDivElement | null>(null)
-  const [timer, setTimer] = React.useState<number>(0)
-  const [session, setSession] = React.useState<string | null>(uuidv4())
-  const [open, setOpen] = React.useState<boolean>(false)
-  const timerRef = React.useRef<NodeJS.Timeout | null>(null)
+  const [functionCalls, setFunctionCalls] = useState<any[]>()
+  const endOfMessagesRef = useRef<HTMLDivElement | null>(null)
+  const [timer, setTimer] = useState<number>(0)
+  const [session, setSession] = useState<string | null>(uuidv4())
+  const [open, setOpen] = useState<boolean>(false)
+  const timerRef = useRef<NodeJS.Timeout | null>(null)
   const { toast } = useToast()
-  const abortControllerRef = React.useRef<AbortController | null>(null)
+  const abortControllerRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     async function fetchWorkflow() {
@@ -94,35 +97,25 @@ export default function Chat({
     resetState()
   }
 
-  const [linkType, setLinkType] = useState<string>('');
-
   const handleToggleLink = (data: { function: string; args: string }) => {
     console.log('Received function call data:', data);
-    try {
-      const args = JSON.parse(data.args);
-      const newLinkType = args.toggle.toUpperCase();
+    const parsedArgs = safeParseJSON(data.args);
+    if (parsedArgs) {
+      const newLinkType = parsedArgs.toggle.toUpperCase();
       if (newLinkType) {
         console.log(`Toggling to stock: ${newLinkType}`);
-        setLinkType(newLinkType);
-        console.log(`linkType state updated to: ${newLinkType}`);
-        // Add the stock chart to the latest message
         setMessages((prevMessages) => {
           const newMessages = [...prevMessages];
           const lastMessage = newMessages[newMessages.length - 1];
           lastMessage.linkType = newLinkType;
+          console.log('Updated linkType:', lastMessage.linkType);
           return newMessages;
         });
       } else {
         console.error('No stock symbol specified in the function call data');
       }
-    } catch (error) {
-      console.error('Error parsing function call args:', error);
     }
   };
-
-  React.useEffect(() => {
-    console.log("Rendering StockChart with props:", linkType);
-  }, [linkType]);
 
   async function onSubmit(value?: string) {
     let messageByEventIds: Record<string, string> = {}
@@ -178,7 +171,7 @@ export default function Chat({
               },
             ])
             resetState()
-            console.log("Message sent. Current linkType:", linkType);
+            console.log("Message sent.");
           },
           async onmessage(event) {
             console.log("Raw event:", event);
@@ -186,15 +179,14 @@ export default function Chat({
             try {
               if (event.event === "function_call") {
                 console.log("Raw event data:", event.data);
-                // Step 1: Replace single quotes with double quotes for the outer JSON structure
+                // Use safeParseJSON for parsing function call data
                 let data = event.data.replace(/'/g, '"');
-                // Step 2: Escape the double quotes inside the `args` value
                 data = data.replace(/"args": "({.*?})"/, (match, p1) => {
                   return `"args": "${p1.replace(/"/g, '\\"')}"`;
                 });
-                const parsedData = JSON.parse(data);
+                const parsedData = safeParseJSON(data);
                 console.log("Parsed function call data:", parsedData);
-                if (parsedData.function === "dotoggle") {
+                if (parsedData?.function === "dotoggle") {
                   handleToggleLink(parsedData);
                 }
               } else if (event.event === "error") {
@@ -263,7 +255,7 @@ export default function Chat({
     }
   }
 
-  React.useEffect(() => {
+  useEffect(() => {
     endOfMessagesRef.current?.scrollIntoView({
       behavior: "smooth",
       block: "nearest",
@@ -287,7 +279,7 @@ export default function Chat({
               steps={steps}
               profile={profile}
               isSuccess={isSuccess}
-              linkType={linkType} // Pass the linkType to Message component
+              linkType={linkType}
             />
           ))}
           <div ref={endOfMessagesRef} />

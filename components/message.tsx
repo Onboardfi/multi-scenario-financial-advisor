@@ -1,6 +1,7 @@
 /* eslint-disable react/jsx-key */
 "use client"
 
+import React, { useEffect } from "react"
 import { motion } from "framer-motion"
 
 import { AiOutlineExclamationCircle } from "react-icons/ai"
@@ -30,8 +31,6 @@ import { useToast } from "@/components/ui/use-toast"
 import { CodeBlock } from "@/components/codeblock"
 import { MemoizedReactMarkdown } from "@/components/markdown"
 
-
-
 function PulsatingCursor() {
   return (
     <motion.div
@@ -56,7 +55,7 @@ interface MessageProps {
   isSuccess?: boolean
   steps?: Record<string, string>
   profile: Profile
-  linkType?: string // Add this line
+  linkType?: string
   onResubmit?: () => void
 }
 
@@ -66,7 +65,7 @@ export default function Message({
   isSuccess = true,
   steps,
   profile,
-  linkType, // Add this line
+  linkType,
   onResubmit,
 }: MessageProps) {
   const { toast } = useToast()
@@ -76,6 +75,12 @@ export default function Message({
       description: "Message copied to clipboard!",
     })
   }
+
+  useEffect(() => {
+    if (linkType) {
+      console.log("linkType in Message component:", linkType);
+    }
+  }, [linkType]);
 
   return (
     <div className="container flex flex-col space-y-1 pb-4 md:max-w-md lg:max-w-4xl">
@@ -97,7 +102,7 @@ export default function Message({
             <>
               {steps
                 ? Object.entries(steps).map(([key, value], index) => (
-                    <Accordion defaultValue={key} type="single" collapsible>
+                    <Accordion defaultValue={key} type="single" collapsible key={index}>
                       <AccordionItem value={key} className="border-muted">
                         <AccordionTrigger
                           className={`mb-4 py-0 text-sm hover:no-underline ${
@@ -181,11 +186,7 @@ const CustomMarkdown = ({ message }: CustomMarkdownProps) => {
         li({ children }) {
           return <li className="pb-1">{children}</li>
         },
-     
       }}
-
-
-      
     >
       {message}
     </MemoizedReactMarkdown>
