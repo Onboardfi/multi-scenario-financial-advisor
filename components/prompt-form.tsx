@@ -36,7 +36,7 @@ export default function PromptFrom({ onSubmit, isLoading }: PromptProps) {
       }}
       ref={formRef}
     >
-      <div className="bg-[#292929] relative flex max-h-40 w-full grow flex-col overflow-hidden px-2 sm:rounded-2xl sm:border border-[#4C4C4C]">
+      <div className="bg-[#ffffff] relative flex max-h-40 w-full grow flex-col overflow-hidden px-2 sm:rounded-2xl sm:border border-[#4C4C4C]">
         <Textarea
           ref={inputRef}
           tabIndex={0}

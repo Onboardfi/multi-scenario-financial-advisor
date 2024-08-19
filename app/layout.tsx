@@ -20,7 +20,7 @@ export default function RootLayout({
     <html lang="en">
       <body
         className={cn(
-          "font-sans antialiased bg-[#292929]",
+          "font-sans antialiased bg-[#ffffff]",
           GeistSans.variable,
           GeistMono.variable
         )}
