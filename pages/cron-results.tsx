@@ -1,8 +1,9 @@
+"use client";
 import React, { useEffect, useState, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { TickerTape } from '@/components/tradingview/ticker-tape';
-import Message from "@/components/message";
-import { Profile } from "@/types/profile";
+import Message from '@/components/message';
+import { Profile } from '@/types/profile';
 
 interface CronResult {
   id: number;
@@ -10,6 +11,11 @@ interface CronResult {
   result?: string;
   error?: string;
   created_at: string;
+}
+
+interface Step {
+  output: string;
+  linkType?: string;
 }
 
 export default function CronResults() {
@@ -37,6 +43,7 @@ export default function CronResults() {
           .limit(10);
 
         if (error) throw error;
+        console.log('Fetched results:', data);
         setResults(data || []);
       } catch (err) {
         console.error('Error fetching results:', err);
@@ -62,29 +69,40 @@ export default function CronResults() {
   return (
     <div className="flex h-screen flex-col">
       <TickerTape />
-      <div className="flex-grow overflow-auto">
-        <div className="flex flex-col space-y-4 p-2">
-          {results.length === 0 ? (
-            <p className="text-center">No results found.</p>
-          ) : (
-            results.map((result) => (
+      <div className="flex-grow overflow-auto p-4">
+        <h1 className="text-2xl font-bold mb-4">Cron Job Results</h1>
+        {results.length === 0 ? (
+          <p className="text-center">No results found.</p>
+        ) : (
+          results.map((result) => {
+            let parsedResult: { data?: { steps?: Step[] } } | null = null;
+            try {
+              parsedResult = result.result ? JSON.parse(result.result) : null;
+            } catch (parseError) {
+              console.error('Error parsing result JSON:', parseError);
+              parsedResult = null;
+            }
+
+            return (
               <Message
                 key={result.id}
-                type="ai"
-                message={result.result || result.error || "No content"}
-                steps={{
-                  [result.session]: {
-                    content: result.result || result.error || "No content",
-                    linkType: undefined
-                  }
-                }}
-                profile={{} as Profile}
-                isSuccess={!result.error}
+                type="ai"  // Assuming these messages are from an AI
+                message={
+                  parsedResult?.data?.steps 
+                    ? parsedResult.data.steps.map(step => step.output).join("\n\n")
+                    : result.error || 'No result or error recorded'
+                }
+                isSuccess={!!result.result}
+                profile={{} as Profile}  // Replace with actual profile data if needed
+                steps={parsedResult?.data?.steps?.reduce<Record<string, { content: string; linkType?: string }>>((acc, step, index) => {
+                  acc[`Step ${index + 1}`] = { content: step.output, linkType: step.linkType };
+                  return acc;
+                }, {})}
               />
-            ))
-          )}
-          <div ref={endOfMessagesRef} />
-        </div>
+            );
+          })
+        )}
+        <div ref={endOfMessagesRef} />
       </div>
     </div>
   );
