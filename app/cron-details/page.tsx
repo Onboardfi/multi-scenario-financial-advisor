@@ -1,11 +1,11 @@
-// pages/cron-details.tsx
+"use client";
 
 import React, { useEffect, useState, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { TickerTape } from '@/components/tradingview/ticker-tape';
 import Message from '@/components/message';
 import { Profile } from '@/types/profile';
-import { useRouter } from 'next/router';
+import { useRouter, useSearchParams } from 'next/navigation';  // Add useSearchParams
 import {
   Card,
   Title,
@@ -34,7 +34,8 @@ export default function CronDetails() {
   const [error, setError] = useState<string | null>(null);
   const endOfMessagesRef = useRef<HTMLDivElement | null>(null);
   const router = useRouter();
-  const { id } = router.query;
+  const searchParams = useSearchParams();  // Use useSearchParams to access query params
+  const id = searchParams?.get('id');  // Safely get the 'id' query parameter
 
   useEffect(() => {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;

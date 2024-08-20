@@ -1,9 +1,9 @@
-// pages/cron-table.tsx
-
-import React, { useEffect, useState } from 'react';
+"use client"
+import React, { useEffect, useState, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { TickerTape } from '@/components/tradingview/ticker-tape';
-import Link from 'next/link';
+import Message from '@/components/message';
+import { Profile } from '@/types/profile';
 import {
   Card,
   Title,
@@ -19,7 +19,7 @@ import {
   Flex,
   ProgressBar,
   Grid,
-  Button,
+  Col
 } from '@tremor/react';
 
 interface CronResult {
@@ -30,10 +30,16 @@ interface CronResult {
   created_at: string;
 }
 
-export default function CronTable() {
+interface Step {
+  output: string;
+  linkType?: string;
+}
+
+export default function CronResults() {
   const [results, setResults] = useState<CronResult[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState({ total: 0, success: 0, error: 0 });
+  const endOfMessagesRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -55,6 +61,7 @@ export default function CronTable() {
           .limit(10);
 
         if (error) throw error;
+        console.log('Fetched results:', data);
         setResults(data || []);
 
         // Calculate stats
@@ -70,6 +77,14 @@ export default function CronTable() {
 
     fetchResults();
   }, []);
+
+  useEffect(() => {
+    endOfMessagesRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "nearest",
+      inline: "nearest",
+    });
+  }, [results]);
 
   if (error) {
     return (
@@ -114,7 +129,6 @@ export default function CronTable() {
                 <TableHeaderCell>Session</TableHeaderCell>
                 <TableHeaderCell>Status</TableHeaderCell>
                 <TableHeaderCell>Created At</TableHeaderCell>
-                <TableHeaderCell>Action</TableHeaderCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -128,18 +142,56 @@ export default function CronTable() {
                     </Badge>
                   </TableCell>
                   <TableCell>{new Date(result.created_at).toLocaleString()}</TableCell>
-                  <TableCell>
-                    <Link href={`/cron-details?id=${result.id}`} passHref>
-                      <Button size="xs" variant="secondary">
-                        View Details
-                      </Button>
-                    </Link>
-                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         </Card>
+
+        <Title className="mt-8 mb-4">Detailed Results</Title>
+        {results.length === 0 ? (
+          <Card>
+            <Text className="text-center">No results found.</Text>
+          </Card>
+        ) : (
+          results.map((result) => {
+            let parsedResult: { data?: { steps?: Step[] } } | null = null;
+            try {
+              parsedResult = result.result ? JSON.parse(result.result) : null;
+            } catch (parseError) {
+              console.error('Error parsing result JSON:', parseError);
+              parsedResult = null;
+            }
+
+            return (
+              <Card key={result.id} className="mb-4">
+                <Flex>
+                  <Title>Job ID: {result.id}</Title>
+                  <Badge color={result.result ? "green" : "red"}>
+                    {result.result ? "Success" : "Error"}
+                  </Badge>
+                </Flex>
+                <Text className="mt-2">Session: {result.session}</Text>
+                <Text>Created At: {new Date(result.created_at).toLocaleString()}</Text>
+                <Message
+                  type="ai"
+                  message={
+                    parsedResult?.data?.steps 
+                      ? parsedResult.data.steps.map(step => step.output).join("\n\n")
+                      : result.error || 'No result or error recorded'
+                  }
+                  isSuccess={!!result.result}
+                  profile={{} as Profile}
+                  steps={parsedResult?.data?.steps?.reduce<Record<string, { content: string; linkType?: string }>>((acc, step, index) => {
+                    acc[`Step ${index + 1}`] = { content: step.output, linkType: step.linkType };
+                    return acc;
+                  }, {})}
+                />
+              </Card>
+            );
+          })
+        )}
+        <div ref={endOfMessagesRef} />
       </div>
     </div>
   );
