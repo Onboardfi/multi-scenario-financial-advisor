@@ -1,4 +1,4 @@
-import fetch from 'node-fetch'; // If you're using Node.js 18+, you can use the built-in fetch instead
+import fetch from 'node-fetch';
 
 export async function sendMessage(value: string, session: string) {
   try {
@@ -13,6 +13,7 @@ export async function sendMessage(value: string, session: string) {
         body: JSON.stringify({
           input: value,
           sessionId: session,
+          enableStreaming: false, // Set to false for cron job
         }),
       }
     );
@@ -23,7 +24,9 @@ export async function sendMessage(value: string, session: string) {
 
     const data = await response.json();
     console.log("Message sent successfully:", data);
+    return data;
   } catch (error) {
     console.error("Failed to send message:", error);
+    throw error;
   }
 }
