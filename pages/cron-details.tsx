@@ -21,7 +21,6 @@ interface CronResult {
   session: string;
   result?: string;
   error?: string;
-  status: 'success' | 'error';
   created_at: string;
 }
 
@@ -94,12 +93,11 @@ export default function CronDetails() {
   }
 
   let parsedResult: { data?: { steps?: Step[] } } | null = null;
-  if (result.status === 'success' && result.result) {
-    try {
-      parsedResult = JSON.parse(result.result);
-    } catch (parseError) {
-      console.error('Error parsing result JSON:', parseError);
-    }
+  try {
+    parsedResult = result.result ? JSON.parse(result.result) : null;
+  } catch (parseError) {
+    console.error('Error parsing result JSON:', parseError);
+    parsedResult = null;
   }
 
   return (
@@ -118,30 +116,26 @@ export default function CronDetails() {
         <Card className="mb-4">
           <Flex justifyContent="between" alignItems="center">
             <Title>Job ID: {result.id}</Title>
-            <Badge color={result.status === 'success' ? "green" : "red"}>
-              {result.status === 'success' ? "Success" : "Error"}
+            <Badge color={result.result ? "green" : "red"}>
+              {result.result ? "Success" : "Error"}
             </Badge>
           </Flex>
           <Text className="mt-2">Session: {result.session}</Text>
           <Text>Created At: {new Date(result.created_at).toLocaleString()}</Text>
-          {result.status === 'success' ? (
-            <Message
-              type="ai"
-              message={
-                parsedResult?.data?.steps 
-                  ? parsedResult.data.steps.map(step => step.output).join("\n\n")
-                  : 'No result recorded'
-              }
-              isSuccess={true}
-              profile={{} as Profile}
-              steps={parsedResult?.data?.steps?.reduce<Record<string, { content: string; linkType?: string }>>((acc, step, index) => {
-                acc[`Step ${index + 1}`] = { content: step.output, linkType: step.linkType };
-                return acc;
-              }, {})}
-            />
-          ) : (
-            <Text className="mt-4 text-red-500">Error: {result.error}</Text>
-          )}
+          <Message
+            type="ai"
+            message={
+              parsedResult?.data?.steps 
+                ? parsedResult.data.steps.map(step => step.output).join("\n\n")
+                : result.error || 'No result or error recorded'
+            }
+            isSuccess={!!result.result}
+            profile={{} as Profile}
+            steps={parsedResult?.data?.steps?.reduce<Record<string, { content: string; linkType?: string }>>((acc, step, index) => {
+              acc[`Step ${index + 1}`] = { content: step.output, linkType: step.linkType };
+              return acc;
+            }, {})}
+          />
         </Card>
         <div ref={endOfMessagesRef} />
       </div>

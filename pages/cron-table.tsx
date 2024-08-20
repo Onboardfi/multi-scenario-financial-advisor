@@ -27,7 +27,6 @@ interface CronResult {
   session: string;
   result?: string;
   error?: string;
-  status: 'success' | 'error';
   created_at: string;
 }
 
@@ -60,8 +59,8 @@ export default function CronTable() {
 
         // Calculate stats
         const total = data?.length || 0;
-        const success = data?.filter(r => r.status === 'success').length || 0;
-        const errorCount = data?.filter(r => r.status === 'error').length || 0;
+        const success = data?.filter(r => !!r.result).length || 0;
+        const errorCount = data?.filter(r => !!r.error).length || 0;
         setStats({ total, success, error: errorCount });
       } catch (err) {
         console.error('Error fetching results:', err);
@@ -124,8 +123,8 @@ export default function CronTable() {
                   <TableCell>{result.id}</TableCell>
                   <TableCell>{result.session}</TableCell>
                   <TableCell>
-                    <Badge color={result.status === 'success' ? "green" : "red"}>
-                      {result.status === 'success' ? "Success" : "Error"}
+                    <Badge color={result.result ? "green" : "red"}>
+                      {result.result ? "Success" : "Error"}
                     </Badge>
                   </TableCell>
                   <TableCell>{new Date(result.created_at).toLocaleString()}</TableCell>
