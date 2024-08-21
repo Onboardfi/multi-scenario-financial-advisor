@@ -28,6 +28,7 @@ interface CronResult {
   result?: string;
   error?: string;
   created_at: string;
+  topic: string; // Add this line
 }
 
 export default function CronTable() {
@@ -112,6 +113,7 @@ export default function CronTable() {
               <TableRow>
                 <TableHeaderCell>ID</TableHeaderCell>
                 <TableHeaderCell>Session</TableHeaderCell>
+                <TableHeaderCell>Topic</TableHeaderCell> {/* Add this line */}
                 <TableHeaderCell>Status</TableHeaderCell>
                 <TableHeaderCell>Created At</TableHeaderCell>
                 <TableHeaderCell>Action</TableHeaderCell>
@@ -122,6 +124,7 @@ export default function CronTable() {
                 <TableRow key={result.id}>
                   <TableCell>{result.id}</TableCell>
                   <TableCell>{result.session}</TableCell>
+                  <TableCell>{result.topic}</TableCell> {/* Add this line */}
                   <TableCell>
                     <Badge color={result.result ? "green" : "red"}>
                       {result.result ? "Success" : "Error"}
