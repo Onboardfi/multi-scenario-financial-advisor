@@ -1,34 +1,57 @@
-# SuperStocks 📈
+# Stonks - AI-Powered Financial Workflow Application
 
-https://github.com/homanp/super-stocks/assets/2464556/926fcda6-d9a1-49b6-8a10-02a4b1672de2
+Welcome to **Stonks**, an AI-driven financial workflow application built using the OnboardFi multi-agent framework. This application automates the generation of recurring stock reports, utilizing AI agents to gather and analyze financial data.
 
-This project is a POC on how to run custom functions/tools with [Superagent.sh](https://github.com/homanp/superagent). 
+## Features
 
-Big thanks to [Alpha Vantage](https://www.alphavantage.co/) for sponsoring us with access to their API.
+- **Multi-Agent Framework:** Leverage multiple AI agents to perform high-level market analysis, gather financial news, and provide sentiment analysis on stocks.
+- **Integration with Financial APIs:** Seamlessly connect with financial tools and APIs to ensure real-time data and accurate insights.
+- **Customizable Workflows:** Easily replicate and customize workflows to suit specific financial needs.
 
-## Demo
-[https://super-stocks.vercel.app](https://super-stocks.vercel.ap)
+## Prerequisites
+
+To run this application, you will need:
+
+- **Node.js** and **npm** (or **yarn**)
+- **OnboardFi API Key**
+- **WorkflowID**
 
 ## Getting Started
-1. Install dependencies:
-  ```bash
-  npm i 
-  ```
 
-2. Change `.env.example` to `.env` and fill out the variables
+### 1. Clone the Repository:
 
-3. Then run the development server:
+```bash
+git clone https://github.com/Onboardfi/stonks.git
+cd stonks
+2. Install Dependencies:
+Run the following command to install all required dependencies:
 
-  ```bash
-  npm run dev
-  ```
+bash
+Copy code
+npm install
+or
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+bash
+Copy code
+yarn install
+3. Set Up Environment Variables:
+Create a .env file in the root of the project and add the required environment variables:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+4. Run the Application:
+Start the application by running:
 
-## Deploy on Vercel
+bash
+Copy code
+npm run dev
+or
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+bash
+Copy code
+yarn dev
+The application will be available at http://localhost:3000.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/deployment) for more details.
+Usage
+Enter Stock Ticker: Use the provided interface to input a stock ticker (e.g., AAPL for Apple).
+View Reports: The application will run the AI-powered workflow, generating a detailed stock report based on the input.
+Contributing
+Contributions are welcome! Please feel free to submit a Pull Request or open an Issue if you encounter any problems or have suggestions for improvements.
