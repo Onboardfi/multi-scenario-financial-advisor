@@ -10,10 +10,10 @@ export default function Page() {
     <div className="p-4 md:p-10 mx-auto max-w-7xl bg-gradient-to-b from-green-50 to-white min-h-screen">
       <div className="text-center mb-10">
         <Title className="text-4xl font-extrabold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-green-500 to-emerald-400">
-          AI-Powered Stock Analysis Workflow
+          Unlock AI-Powered Stock Insights
         </Title>
         <Text className="text-xl mb-6 text-gray-600">
-          Experience the power of multi-agent AI analysis for any stock ticker.
+          Harness the power of multi-agent AI to gain comprehensive analysis on any stock ticker in minutes.
         </Text>
       </div>
 
@@ -27,23 +27,23 @@ export default function Page() {
               <div className="bg-green-500 rounded-full p-2 mr-3">
                 <span className="text-white font-bold">1</span>
               </div>
-              <Text>Enter a stock ticker (e.g., AAPL for Apple)</Text>
+              <Text>Enter a stock ticker (e.g., AAPL for Apple).</Text>
             </div>
             <div className="flex items-start">
               <div className="bg-green-500 rounded-full p-2 mr-3 mt-1">
                 <span className="text-white font-bold">2</span>
               </div>
               <div>
-                <Text className="font-semibold">Our AI agents will perform:</Text>
+                <Text className="font-semibold">Our AI agents will:</Text>
                 <ul className="list-none space-y-2 mt-2">
                   <li className="flex items-center">
-                    <span className="text-emerald-500 mr-2">➤</span> High-level market analysis
+                    <span className="text-emerald-500 mr-2">➤</span> Perform a high-level market overview
                   </li>
                   <li className="flex items-center">
-                    <span className="text-emerald-500 mr-2">➤</span> Interpretive financial assessment
+                    <span className="text-emerald-500 mr-2">➤</span> Gather and analyze financial news
                   </li>
                   <li className="flex items-center">
-                    <span className="text-emerald-500 mr-2">➤</span> Comprehensive data gathering
+                    <span className="text-emerald-500 mr-2">➤</span> Provide sentiment-driven insights
                   </li>
                 </ul>
               </div>
@@ -52,7 +52,7 @@ export default function Page() {
               <div className="bg-green-500 rounded-full p-2 mr-3">
                 <span className="text-white font-bold">3</span>
               </div>
-              <Text>Review the collaborative AI-generated report</Text>
+              <Text>Review your AI-generated stock report, tailored to your input.</Text>
             </div>
           </div>
 
@@ -68,26 +68,26 @@ export default function Page() {
               />
             </Link>
             <Text className="text-sm mt-2 italic text-gray-600">
-              This open-source product is built by the{' '}
+              Brought to you by the{' '}
               <Link href="https://www.onboardfi.com/" className="text-green-500 hover:underline">
                 OnboardFi
               </Link>{' '}
-              team and powered by the OnboardFi API.
+              team, leveraging the OnboardFi API for financial workflow automation.
             </Text>
           </div>
         </Card>
         <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300">
-          <Title className="mb-4 text-2xl font-bold text-green-600">Try It Now</Title>
+          <Title className="mb-4 text-2xl font-bold text-green-600">Get Started</Title>
           <Text className="mb-4">Enter a stock ticker to see the workflow in action:</Text>
           <TopicForm />
         </Card>
       </Grid>
       <div className="text-center bg-gradient-to-r from-green-100 to-emerald-100 p-6 rounded-lg shadow-inner">
         <Text className="mb-4 text-lg text-gray-700">
-          Satisfied with the results? Save this ticker for continuous monitoring.
+          Like what you see? Save this ticker for ongoing monitoring.
         </Text>
         <Text className="mb-6 text-lg text-gray-700">
-          Our system will run this workflow every 10 minutes, providing you with up-to-date insights.
+          Our system will run the workflow every 10 minutes, keeping you informed with the latest insights.
         </Text>
         <Link href="/cron-table" passHref>
           <Button size="lg" variant="primary" className="bg-green-500 hover:bg-green-600 transition-colors duration-300">
@@ -96,7 +96,7 @@ export default function Page() {
         </Link>
       </div>
       <Card className="mb-10 shadow-lg">
-        <Title className="mb-4 text-2xl font-bold text-green-600">Sample Workflow Result</Title>
+        <Title className="mb-4 text-2xl font-bold text-green-600">Sample Report</Title>
         <ChatComponent />
       </Card>
     </div>

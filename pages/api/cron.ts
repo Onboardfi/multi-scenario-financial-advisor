@@ -4,18 +4,21 @@ import { v4 as uuidv4 } from 'uuid';
 import { supabaseAdmin } from '@/lib/supabase';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-
-  if (!supabaseAdmin) {
-    return res.status(500).json({ error: 'Database connection not available' });
-  }
-
   const session = uuidv4();
+  console.time(`cron-job-${session}`);
 
   try {
-    console.log('Starting cron job...');
+    // Authorization check
+    if (req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    // Database connection check
+    if (!supabaseAdmin) {
+      return res.status(500).json({ error: 'Database connection not available' });
+    }
+
+    console.log(`[${session}] Starting cron job...`);
 
     // Fetch the latest topic from the database
     const { data: latestTopic, error: topicError } = await supabaseAdmin
@@ -33,51 +36,48 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       throw new Error('No topics found in the database');
     }
 
-    console.log('Latest topic:', latestTopic.name);
+    console.log(`[${session}] Latest topic: ${latestTopic.name}`);
 
+    // Send message
     const result = await sendMessage(latestTopic.name, session);
 
-    console.log('Message sent successfully, saving to Supabase...');
+    console.log(`[${session}] Message sent successfully, saving to Supabase...`);
 
-    try {
-      const { data: insertedData, error: supabaseError } = await supabaseAdmin
-        .from('cron_results')
-        .insert({ session, result: JSON.stringify(result), topic: latestTopic.name })
-        .select()
-        .single();
+    // Save result to database
+    const { data: insertedData, error: supabaseError } = await supabaseAdmin
+      .from('cron_results')
+      .insert({ session, result: JSON.stringify(result), topic: latestTopic.name })
+      .select()
+      .single();
 
-      if (supabaseError) {
-        console.error('Error saving to Supabase:', supabaseError);
-        throw supabaseError;
-      }
-
-      console.log('Result saved to Supabase:', {
-        session: insertedData.session,
-        topic: insertedData.topic,
-        resultSummary: JSON.stringify(insertedData.result).substring(0, 100) + '...'
-      });
-
-      res.status(200).json({ 
-        message: `${latestTopic.name} message sent and saved successfully`,
-        session: insertedData.session,
-        topic: insertedData.topic
-      });
-    } catch (supabaseError) {
-      console.error('Supabase operation failed:', supabaseError);
-      res.status(500).json({ error: "Failed to save result to database", details: supabaseError });
+    if (supabaseError) {
+      throw new Error('Failed to save result to database');
     }
 
+    console.log(`[${session}] Result saved to Supabase:`, {
+      session: insertedData.session,
+      topic: insertedData.topic,
+      resultSummary: JSON.stringify(insertedData.result).substring(0, 100) + '...'
+    });
+
+    res.status(200).json({ 
+      message: `${latestTopic.name} message sent and saved successfully`,
+      session: insertedData.session,
+      topic: insertedData.topic
+    });
+
   } catch (error: unknown) {
-    console.error("Error in cron job:", error);
+    console.error(`[${session}] Error in cron job:`, error);
 
     let errorMessage = 'Unknown error';
-
     if (error instanceof Error) {
       errorMessage = error.message;
     } else if (typeof error === 'string') {
       errorMessage = error;
     }
 
-    res.status(500).json({ error: "Failed to send or save message", details: errorMessage });
+    res.status(500).json({ error: "Failed to execute cron job", details: errorMessage });
+  } finally {
+    console.timeEnd(`cron-job-${session}`);
   }
 }
