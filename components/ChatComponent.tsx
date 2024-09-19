@@ -1,18 +1,24 @@
-"use client"
-import React, { useState, useEffect, useRef } from "react"
-import { Workflow } from "@/models/models"
-import { fetchEventSource } from "@microsoft/fetch-event-source"
-import dayjs from "dayjs"
-import relativeTime from "dayjs/plugin/relativeTime"
-import { v4 as uuidv4 } from "uuid"
-import { Profile } from "@/types/profile"
-import { useToast } from "@/components/ui/use-toast"
-import Message from "@/components/message"
-import PromptForm from "../app/prompt-form"
-import { TickerTape } from '@/components/tradingview/ticker-tape'
+// /Users/bobbygilbert/Documents/Github/stonks/components/ChatComponent.tsx
 
-dayjs.extend(relativeTime)
-const defaultFunctionCalls = [{ type: "start" }]
+"use client";
+import React, { useState, useEffect, useRef } from "react";
+import { Workflow } from "@/models/models";
+import { fetchEventSource } from "@microsoft/fetch-event-source";
+import dayjs from "dayjs";
+import relativeTime from "dayjs/plugin/relativeTime";
+import { v4 as uuidv4 } from "uuid";
+import { Profile } from "@/types/profile";
+import { useToast } from "@/components/ui/use-toast";
+import Message from "@/components/message";
+import PromptForm from "../app/prompt-form";
+import { TickerTape } from "@/components/tradingview/ticker-tape";
+
+// Define the allowed message types
+type MessageType = 'human' | 'ai';
+
+dayjs.extend(relativeTime);
+
+const defaultFunctionCalls = [{ type: "start" }];
 
 const safeParseJSON = (data: string) => {
   try {
@@ -21,46 +27,42 @@ const safeParseJSON = (data: string) => {
     console.error("Error parsing JSON:", error, "Data:", data);
     return null;
   }
+};
+
+interface MessageData {
+  type: MessageType;
+  message: string;
+  steps?: Record<string, { content: string; linkType?: string }>;
+  isSuccess?: boolean;
 }
 
 export default function ChatComponent() {
-  const [workflow, setWorkflow] = useState<Workflow | null>(null)
-  const [isLoading, setIsLoading] = useState<boolean>(false)
-  const [messages, setMessages] = useState<{
-    type: string
-    message: string
-    steps?: Record<string, { content: string; linkType?: string }>
-    isSuccess?: boolean
-  }[]>([])
-  const [functionCalls, setFunctionCalls] = useState<any[]>()
-  const endOfMessagesRef = useRef<HTMLDivElement | null>(null)
-  const [timer, setTimer] = useState<number>(0)
-  const [session, setSession] = useState<string | null>(uuidv4())
-  const timerRef = useRef<NodeJS.Timeout | null>(null)
-  const { toast } = useToast()
-  const abortControllerRef = useRef<AbortController | null>(null)
+  const [workflow, setWorkflow] = useState<Workflow | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [messages, setMessages] = useState<MessageData[]>([]);
+  const [functionCalls, setFunctionCalls] = useState<any[]>();
+  const endOfMessagesRef = useRef<HTMLDivElement | null>(null);
+  const [timer, setTimer] = useState<number>(0);
+  const [session, setSession] = useState<string | null>(uuidv4());
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const { toast } = useToast();
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     async function fetchWorkflow() {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_SUPERAGENT_API_URL}/workflows/${process.env.NEXT_PUBLIC_WORKFLOW_ID}`, {
-        headers: {
-          authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPERAGENT_API_KEY}`,
-        },
-      });
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_SUPERAGENT_API_URL}/workflows/${process.env.NEXT_PUBLIC_WORKFLOW_ID}`,
+        {
+          headers: {
+            authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPERAGENT_API_KEY}`,
+          },
+        }
+      );
       const data = await response.json();
       if (data.success) {
         setWorkflow(data.data);
         if (data.data.steps[0]?.agent?.initialMessage) {
-          setMessages([{ 
-            type: "ai", 
-            message: data.data.steps[0].agent.initialMessage, 
-            steps: { 
-              "initialMessage": { 
-                content: data.data.steps[0].agent.initialMessage, 
-                linkType: undefined 
-              } 
-            } 
-          }]);
+
         }
       }
     }
@@ -68,22 +70,22 @@ export default function ChatComponent() {
   }, []);
 
   const resetState = () => {
-    setIsLoading(false)
-    setTimer(0)
+    setIsLoading(false);
+    setTimer(0);
     if (timerRef.current) {
-      clearInterval(timerRef.current)
+      clearInterval(timerRef.current);
     }
-  }
+  };
 
   const abortStream = () => {
     if (abortControllerRef.current) {
-      abortControllerRef.current.abort()
+      abortControllerRef.current.abort();
     }
-    resetState()
-  }
+    resetState();
+  };
 
   const handleToggleLink = (data: { function: string; args: string }) => {
-    console.log('Received function call data:', data);
+    console.log("Received function call data:", data);
     const parsedArgs = safeParseJSON(data.args);
     if (parsedArgs) {
       const newLinkType = parsedArgs.toggle.toUpperCase();
@@ -98,14 +100,14 @@ export default function ChatComponent() {
               const firstStepKey = stepKeys[0];
               lastMessage.steps[firstStepKey] = {
                 ...lastMessage.steps[firstStepKey],
-                linkType: newLinkType
+                linkType: newLinkType,
               };
               // Clear linkType from other steps
-              stepKeys.slice(1).forEach(key => {
-                if (lastMessage.steps) {  // Add this check
+              stepKeys.slice(1).forEach((key) => {
+                if (lastMessage.steps) {
                   lastMessage.steps[key] = {
                     ...lastMessage.steps[key],
-                    linkType: undefined
+                    linkType: undefined,
                   };
                 }
               });
@@ -114,33 +116,38 @@ export default function ChatComponent() {
           return newMessages;
         });
       } else {
-        console.error('No stock symbol specified in the function call data');
+        console.error(
+          "No stock symbol specified in the function call data"
+        );
       }
     }
   };
-  
+
   async function onSubmit(value?: string) {
-    let messageByEventIds: Record<string, { content: string; linkType?: string }> = {}
-    let currentEventId = ""
+    let messageByEventIds: Record<
+      string,
+      { content: string; linkType?: string }
+    > = {};
+    let currentEventId = "";
 
     if (abortControllerRef.current) {
-      abortControllerRef.current.abort()
+      abortControllerRef.current.abort();
     }
 
-    abortControllerRef.current = new AbortController()
+    abortControllerRef.current = new AbortController();
 
-    setIsLoading(true)
+    setIsLoading(true);
 
-    setTimer(0)
+    setTimer(0);
     timerRef.current = setInterval(() => {
-      setTimer((prevTimer) => prevTimer + 0.1)
-    }, 100)
+      setTimer((prevTimer) => prevTimer + 0.1);
+    }, 100);
 
     setMessages((previousMessages) => [
       ...previousMessages,
-      { type: "human", message: value || "" },
-      { type: "ai", message: "" }
-    ])
+      { type: "human", message: value || "" }, // No steps property
+      { type: "ai", message: "", steps: {} }, // Initialize steps if needed
+    ]);
 
     try {
       await fetchEventSource(
@@ -159,11 +166,11 @@ export default function ChatComponent() {
           openWhenHidden: true,
           signal: abortControllerRef.current.signal,
           async onopen(response) {
-            setFunctionCalls(defaultFunctionCalls)
+            setFunctionCalls(defaultFunctionCalls);
           },
           onclose() {
-            setFunctionCalls((prev = []) => [...prev, { type: "end" }])
-            resetState()
+            setFunctionCalls((prev = []) => [...prev, { type: "end" }]);
+            resetState();
             console.log("Message sent.");
           },
           onmessage(event) {
@@ -172,7 +179,11 @@ export default function ChatComponent() {
             try {
               if (event.event === "function_call") {
                 console.log("Raw event data:", event.data);
-                let data = event.data.replace(/'/g, '"').replace(/"args": "({.*?})"/, (match, p1) => `"args": "${p1.replace(/"/g, '\\"')}"`);
+                let data = event.data
+                  .replace(/'/g, '"')
+                  .replace(/"args": "({.*?})"/, (match, p1) => {
+                    return `"args": "${p1.replace(/"/g, '\\"')}"`;
+                  });
                 const parsedData = safeParseJSON(data);
                 console.log("Parsed function call data:", parsedData);
                 if (parsedData?.function === "dotoggle") {
@@ -181,7 +192,9 @@ export default function ChatComponent() {
               } else if (event.event === "error") {
                 setMessages((prev) => {
                   const updated = [...prev];
-                  const lastAiMessage = updated.findLast(m => m.type === "ai");
+                  const lastAiMessage = updated.findLast(
+                    (m) => m.type === "ai"
+                  );
                   if (lastAiMessage) {
                     lastAiMessage.message = event.data;
                     lastAiMessage.isSuccess = false;
@@ -192,24 +205,33 @@ export default function ChatComponent() {
                 if (!messageByEventIds[currentEventId]) {
                   messageByEventIds[currentEventId] = { content: "" };
                 }
-                messageByEventIds[currentEventId].content += event.data === "" ? "\n" : event.data;
+                messageByEventIds[currentEventId].content +=
+                  event.data === "" ? "\n" : event.data;
                 setMessages((prev) => {
                   const updated = [...prev];
-                  const lastAiMessage = updated.findLast(m => m.type === "ai");
+                  const lastAiMessage = updated.findLast(
+                    (m) => m.type === "ai"
+                  );
                   if (lastAiMessage) {
                     lastAiMessage.steps = { ...messageByEventIds };
                   }
                   return updated;
                 });
+
+                // Add the latest message to Notion
+                // (Assuming you have logic here to send messages to Notion if needed)
               }
             } catch (error) {
               console.error("Error processing event:", error);
               console.log("Problematic event data:", event.data);
               setMessages((prev) => {
                 const updated = [...prev];
-                const lastAiMessage = updated.findLast(m => m.type === "ai");
+                const lastAiMessage = updated.findLast(
+                  (m) => m.type === "ai"
+                );
                 if (lastAiMessage) {
-                  lastAiMessage.message = "An error occurred while processing the response.";
+                  lastAiMessage.message =
+                    "An error occurred while processing the response.";
                   lastAiMessage.isSuccess = false;
                 }
                 return updated;
@@ -217,17 +239,18 @@ export default function ChatComponent() {
             }
           },
           onerror(error) {
-            throw error
+            throw error;
           },
         }
-      )
+      );
     } catch {
-      resetState()
+      resetState();
       setMessages((prev) => {
         const updated = [...prev];
-        const lastAiMessage = updated.findLast(m => m.type === "ai");
+        const lastAiMessage = updated.findLast((m) => m.type === "ai");
         if (lastAiMessage) {
-          lastAiMessage.message = "An error occurred with your agent, please contact support.";
+          lastAiMessage.message =
+            "An error occurred with your agent, please contact support.";
           lastAiMessage.isSuccess = false;
         }
         return updated;
@@ -240,11 +263,11 @@ export default function ChatComponent() {
       behavior: "smooth",
       block: "nearest",
       inline: "nearest",
-    })
-  }, [messages])
+    });
+  }, [messages]);
 
   if (!workflow) {
-    return <div>Loading...</div>
+    return <div>Loading...</div>;
   }
 
   return (
@@ -252,38 +275,40 @@ export default function ChatComponent() {
       <TickerTape />
       <div className="flex-grow overflow-auto">
         <div className="flex flex-col space-y-4 p-2">
-          {messages.map(({ type, message, steps, isSuccess }, index) => (
-            <Message
-              key={index}
-              type={type}
-              message={message}
-              steps={steps}
-              profile={{} as Profile} // You might want to pass the actual profile here
-              isSuccess={isSuccess}
-            />
-          ))}
+          {messages.map(
+            ({ type, message, steps, isSuccess }, index) => (
+              <Message
+                key={index}
+                type={type}
+                message={message}
+                steps={steps}
+                profile={{} as Profile} // Ideally, pass the actual profile data
+                isSuccess={isSuccess}
+              />
+            )
+          )}
           <div ref={endOfMessagesRef} />
         </div>
       </div>
       <div className="sticky bottom-0 flex-shrink-0 border-t bg-background p-4">
         <div className="mx-auto max-w-4xl">
-        <PromptForm
-  onStop={abortStream}
-  onSubmit={onSubmit}
-  onCreateSession={async (uuid) => {
-    setSession(uuid)
-    if (timerRef.current) {
-      clearInterval(timerRef.current)
-    }
-    setMessages([])
-    toast({
-      description: "New session created",
-    })
-  }}
-  isLoading={isLoading}
-/>
+          <PromptForm
+            onStop={abortStream}
+            onSubmit={onSubmit}
+            onCreateSession={async (uuid) => {
+              setSession(uuid);
+              if (timerRef.current) {
+                clearInterval(timerRef.current);
+              }
+              setMessages([]);
+              toast({
+                description: "New session created",
+              });
+            }}
+            isLoading={isLoading}
+          />
         </div>
       </div>
     </div>
-  )
+  );
 }
